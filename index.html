@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTG Deckfinder</title>
+<style>
+:root{--bg:#eef1f5;--fg:#16202c;--mut:#5d6b7b;--card:#fff;--bd:#d3dae3;--ac:#1f5f8b;--ok:#2a8a5c;--mid:#c58a1b;--low:#b5503f}
+@media(prefers-color-scheme:dark){:root{--bg:#121820;--fg:#e4e9ef;--mut:#93a0b0;--card:#1b232d;--bd:#2c3744;--ac:#5aa6d6;--ok:#4cc08a;--mid:#e0a93b;--low:#e0806e}}
+*{box-sizing:border-box}
+body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg);max-width:980px;margin:0 auto;padding:24px 16px 60px}
+h1,h2{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-weight:600;margin:0}
+h1{font-size:30px;margin-bottom:4px}
+h2{font-size:19px;margin-bottom:10px}
+section{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:18px;margin:16px 0}
+button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:9px 16px;cursor:pointer;font:inherit}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+textarea,input[type=text],input[type=number]{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:8px;font:inherit}
+input[type=number]{width:80px}
+.mut{color:var(--mut);font-size:13px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
+#cmds{max-height:260px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 14px;margin-top:10px;border:1px solid var(--bd);border-radius:6px;padding:8px}
+#cmds label{display:flex;gap:6px;align-items:flex-start}
+.res{border-top:1px solid var(--bd);padding:12px 0;display:grid;grid-template-columns:84px 1fr;gap:14px;align-items:start}
+.pct{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:30px;line-height:1;font-weight:700}
+.bar{height:5px;background:var(--bd);border-radius:3px;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%}
+pre{white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;margin:8px 0 0;max-height:220px;overflow:auto}
+summary{cursor:pointer;color:var(--ac)}
+select{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:6px;font:inherit;max-width:100%}
+.chip{display:inline-block;background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:0 6px;margin:2px 2px 2px 0;font-size:13px}
+button.sec{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+a{color:var(--ac)}
+</style>
+</head>
+<body>
+<h1>MTG Deckfinder</h1>
+<p class="mut">Sammlung laden, dann vergleicht die App EDHREC-Average-Decks, Combos von Commander Spellbook und offizielle Precons mit deinen Karten.</p>
+
+<section>
+  <h2>1. Sammlung laden</h2>
+  <p class="mut">CSV-Export aus Moxfield, Archidekt, ManaBox o. ä. (Spalten „Name“ und „Count/Quantity“) oder eine Textliste mit „1 Sol Ring“ pro Zeile.</p>
+  <input type="file" id="file" accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel">
+  <span class="mut">Die Datei wird sofort nach der Auswahl geladen.</span>
+  <textarea id="paste" rows="3" placeholder="…oder Kartenliste hier einfügen" style="margin-top:8px"></textarea>
+  <div class="row"><button id="useText">Eingefügten Text übernehmen</button><span id="st1" class="mut"></span></div>
+</section>
+
+<section>
+  <h2>2. Commander wählen</h2>
+  <div class="row" style="margin-top:0"><button id="loadCmd" disabled>Commander in meiner Sammlung finden</button><span id="st2" class="mut"></span></div>
+  <input type="text" id="flt" placeholder="Filtern…" style="margin-top:10px">
+  <div class="row" style="margin-top:8px"><button type="button" class="sec" id="selAll">Alle angezeigten auswählen</button><button type="button" class="sec" id="selNone">Auswahl aufheben</button></div>
+  <div id="cmds"></div>
+  <p id="cnt" class="mut"></p>
+  <div class="row">
+    <div id="edhopts" style="flex-basis:100%">
+      <b>EDHREC Average Deck</b>
+      <div class="row">Bracket:
+        <label><input type="checkbox" class="edhb" value="" checked> Allgemein</label>
+        <label><input type="checkbox" class="edhb" value="optimized"> Bracket 4</label>
+        <label><input type="checkbox" class="edhb" value="cedh"> Bracket 5</label></div>
+      <div class="row">Budget:
+        <label><input type="checkbox" class="edhu" value="" checked> Standard</label>
+        <label><input type="checkbox" class="edhu" value="budget"> Budget</label>
+        <label><input type="checkbox" class="edhu" value="expensive"> Teuer</label></div>
+      <div class="row">Thema:
+        <label><input type="checkbox" id="edhtn" checked> Ohne Thema</label>
+        <label><input type="checkbox" id="edht"> die 3 beliebtesten Themen</label></div>
+      <div class="row">Varianten überspringen, wenn EDHREC höchstens <input type="number" id="edhmin" value="5" min="1" style="width:70px"> Decks dafür meldet</div>
+      <div id="edhn" class="mut"></div>
+    </div>
+    <button id="go" disabled>Decks suchen und vergleichen</button>
+    <span id="st3" class="mut"></span>
+  </div>
+</section>
+
+<section>
+  <h2>Ergebnisse</h2>
+  <div class="row" style="margin-top:0"><label>Mindestens <input type="number" id="min" value="60" min="0" max="100"> % vorhanden</label></div>
+  <div id="res"></div>
+</section>
+
+<section>
+  <h2>Combos aus meiner Sammlung</h2>
+  <p class="mut">Daten von <a href="https://commanderspellbook.com/" target="_blank" rel="noopener">Commander Spellbook</a>. Die App sucht alle Combos, bei denen du jede Karte besitzt. Nur mit dem lokalen Server verfügbar.</p>
+  <div class="row">
+    <label>Farbidentität: <select id="cmbCI"><option value="*">Alle (kein Filter)</option></select></label>
+    <label><input type="checkbox" id="cmbAlmost" checked> auch Combos mit 1 fehlenden Karte</label>
+    <button id="cmbGo" disabled>Combos suchen</button>
+    <span id="cmbSt" class="mut"></span>
+  </div>
+  <div id="cmbRes"></div>
+</section>
+
+<section>
+  <h2>Offizielle Commander-Precons</h2>
+  <p class="mut">Daten von <a href="https://mtgjson.com/" target="_blank" rel="noopener">MTGJSON</a>. Zeigt, welche Precons du schon ganz oder fast besitzt. Nur mit dem lokalen Server verfügbar.</p>
+  <div class="row"><label>Mindestens <input type="number" id="pMin" value="50" min="0" max="100"> % vorhanden</label>
+    <button id="pGo" disabled>Precons prüfen</button><span id="pSt" class="mut"></span></div>
+  <div id="pRes"></div>
+</section>
+
+<section>
+  <h2>Einzelnes Deck prüfen</h2>
+  <p class="mut">Decklist von einer beliebigen Seite (z. B. Moxfield) einfügen.</p>
+  <textarea id="man" rows="5" placeholder="1 Sol Ring&#10;1 Command Tower&#10;…"></textarea>
+  <div class="row"><button id="chk" disabled>Prüfen</button></div>
+  <div id="manres"></div>
+</section>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=n=>n.toLowerCase().split(' // ')[0].replace(/[’‘]/g,"'").trim();
+const slug=n=>norm(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s-]/g,'').trim().replace(/\s+/g,'-');
+const BASIC=new Set(['plains','island','swamp','mountain','forest','wastes','snow-covered plains','snow-covered island','snow-covered swamp','snow-covered mountain','snow-covered forest']);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const VIA=location.protocol.startsWith('http');
+const jget=async u=>{const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json()};
+let coll=new Map(),cmdPool=[],cmdCI={},results=[],lastErr=[],lastNone=[];const sel=new Set();
+
+/* ---------- Parsen ---------- */
+function parseCSV(t,d=','){const rows=[];let r=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c=='"')q=true;
+    else if(c==d){r.push(f);f=''}
+    else if(c=='\n'){r.push(f);rows.push(r);r=[];f=''}
+    else if(c!='\r')f+=c}
+  if(f||r.length){r.push(f);rows.push(r)}return rows}
+function parseText(t){return t.split(/\r?\n/).map(l=>l.trim())
+  .filter(l=>l&&!l.startsWith('//')&&!/^(sideboard|maybeboard|commander|deck)$/i.test(l))
+  .map(l=>{const m=l.match(/^(\d+)\s*x?\s+(.+?)(?:\s+\([A-Za-z0-9]+\)(?:\s+\S+)*)?$/);return m?{name:m[2],qty:+m[1]}:{name:l,qty:1}})}
+function parseAny(t){t=t.replace(/^\uFEFF/,'');
+  const first=t.split(/\r?\n/).find(l=>l.trim())||'';
+  const d=[',',';','\t'].map(c=>[c,first.split(c).length]).sort((x,y)=>y[1]-x[1])[0];
+  if(d[1]>1&&/name|karte|card/i.test(first)){
+    const rows=parseCSV(t,d[0]).filter(r=>r.some(x=>x.trim()));
+    const h=rows[0].map(x=>x.toLowerCase().replace(/[^a-zäöü]/g,''));
+    let ni=h.findIndex(x=>['name','cardname','card','kartenname','karte'].includes(x));
+    if(ni<0)ni=h.findIndex(x=>x.includes('name')&&!x.includes('set'));
+    const qi=h.findIndex(x=>['count','quantity','qty','amount','anzahl','menge'].includes(x));
+    if(ni<0){parseAny.info='Kopfzeile: '+rows[0].join(' | ');return[]}
+    parseAny.info=`Spalte Name: „${rows[0][ni]}“, Anzahl: ${qi>=0?'„'+rows[0][qi]+'“':'nicht gefunden (je 1)'}`;
+    return rows.slice(1).filter(r=>r[ni]&&r[ni].trim()).map(r=>({name:r[ni].trim(),qty:qi>=0?parseInt(r[qi])||1:1}))}
+  parseAny.info='Textliste';return parseText(t)}
+async function readFile(f){const b=new Uint8Array(await f.arrayBuffer());
+  if(b[0]==0xFF&&b[1]==0xFE)return new TextDecoder('utf-16le').decode(b);
+  if(b[0]==0xFE&&b[1]==0xFF)return new TextDecoder('utf-16be').decode(b);
+  const u=new TextDecoder('utf-8').decode(b);
+  return u.includes('\uFFFD')?new TextDecoder('windows-1252').decode(b):u}
+
+/* ---------- Sammlung ---------- */
+function setColl(text){const L=parseAny(text);coll=new Map();let n=0;
+  for(const c of L){const k=norm(c.name);coll.set(k,(coll.get(k)||0)+c.qty);n+=c.qty}
+  if(!coll.size){$('#st1').textContent='Keine Karten erkannt. '+(parseAny.info||'')+' (Zeichen insgesamt: '+text.length+')';return}
+  $('#st1').textContent=`${n} Karten geladen (${coll.size} verschiedene). ${parseAny.info}`;
+  $('#loadCmd').disabled=false;$('#chk').disabled=false;cmdPool=[];sel.clear();$('#cmds').innerHTML='';$('#cnt').textContent=''}
+$('#file').onchange=async e=>{const f=e.target.files[0];if(f)setColl(await readFile(f))};
+$('#useText').onclick=()=>{const t=$('#paste').value;
+  if(!t.trim()){$('#st1').textContent=coll.size?`Textfeld ist leer, die geladene Sammlung (${coll.size} verschiedene Karten) bleibt bestehen.`:'Textfeld ist leer. Eine ausgewählte Datei wird automatisch geladen, dieser Button ist nur für eingefügten Text.';return}
+  setColl(t)};
+
+/* ---------- Commander ---------- */
+async function loadCommanders(){
+  $('#loadCmd').disabled=true;const out=[];let p=0;
+  let url='https://api.scryfall.com/cards/search?q='+encodeURIComponent('is:commander')+'&unique=cards';
+  try{
+    while(url){const j=await jget(url);
+      for(const c of j.data)if(coll.has(norm(c.name))){out.push(c.name);cmdCI[c.name]=(c.color_identity||[]).join('')}
+      url=j.has_more?j.next_page:null;p++;$('#st2').textContent=`Scryfall, Seite ${p}…`;await sleep(120)}
+    cmdPool=[...new Set(out)].sort();$('#st2').textContent=`Fertig: ${cmdPool.length} Commander gefunden.`;renderCmds();fillCmb();$('#go').disabled=!cmdPool.length
+  }catch(e){$('#st2').textContent='Fehler: '+e.message+'. Die Datei muss lokal im Browser geöffnet sein, mit Internetverbindung.'}
+  $('#loadCmd').disabled=false}
+function perCmd(){const p=edhPlan();return p.b.length*p.u.length*((p.base?1:0)+(p.top?3:0))+(p.top?1:0)}
+function estimate(){const n=sel.size*perCmd();return{n,min:Math.max(1,Math.ceil(n*0.7/60))}}
+function updCnt(){const e=estimate();
+  $('#cnt').textContent=`${cmdPool.length} mögliche Commander in deiner Sammlung, ${sel.size} ausgewählt`+(sel.size?` – bis zu ${e.n} Abrufe, grob ${e.min} Min.`:'')}
+$('#selAll').onclick=()=>{document.querySelectorAll('#cmds input').forEach(i=>{i.checked=true;sel.add(i.dataset.n)});updCnt()};
+$('#selNone').onclick=()=>{sel.clear();document.querySelectorAll('#cmds input').forEach(i=>i.checked=false);updCnt()};
+function renderCmds(){const f=$('#flt').value.toLowerCase();
+  $('#cmds').innerHTML=cmdPool.filter(n=>n.toLowerCase().includes(f)).map(n=>`<label><input type="checkbox" data-n="${esc(n)}" ${sel.has(n)?'checked':''}> ${esc(n)}</label>`).join('')||'<span class="mut">Keine Treffer</span>';updCnt()}
+$('#cmds').onchange=e=>{const n=e.target.dataset.n;if(!n)return;e.target.checked?sel.add(n):sel.delete(n);updCnt()};
+$('#flt').oninput=renderCmds;
+$('#loadCmd').onclick=loadCommanders;
+
+/* ---------- Quellen (inoffizielle APIs) ---------- */
+/* Liest Kartenlisten in vielen möglichen Formen: "29 Forest", ["Forest",29], {name,count}, {Forest:29}, Gruppen davon */
+function flat(v){const out=[];
+  (function w(x){
+    if(typeof x=='string'){if(/^\s*\d*\s*$/.test(x))return;const c=parseText(x)[0];if(c)out.push(c)}
+    else if(Array.isArray(x)){
+      const pair=x.length>=2&&x.length<=3&&typeof x[0]=='string'&&typeof x[1]=='number';
+      if(pair)out.push({name:x[0],qty:x[1]});else x.forEach(w)}
+    else if(x&&typeof x=='object'){
+      const n=x.name||x.n||(typeof x.card=='string'?x.card:x.card&&x.card.name);
+      if(n&&typeof n=='string')out.push({name:n,qty:+(x.qty??x.count??x.quantity??x.c??x.q??x.amount)||1});
+      else for(const [k,val] of Object.entries(x)){
+        const qk=val&&typeof val=='object'&&!Array.isArray(val)?['qty','count','quantity','c','q','amount'].find(z=>typeof val[z]=='number'):null;
+        if(typeof val=='number')out.push({name:k,qty:val});
+        else if(typeof val=='string'&&/^\d+$/.test(val.trim()))out.push({name:k,qty:+val});
+        else if(qk&&!(val.name||val.n||val.card))out.push({name:k,qty:val[qk]});
+        else w(val)}}
+  })(v);return out}
+function mergeMax(list){const m=new Map();
+  for(const c of list){const k=norm(c.name),o=m.get(k);if(!o||c.qty>o.qty)m.set(k,{name:c.name,qty:c.qty})}
+  return[...m.values()]}
+function avgDeck(a){const d=a.deck;let L=[];
+  if(Array.isArray(d))L=mergeMax(flat(d));
+  else if(d&&typeof d=='object')L=mergeMax(flat(d.cards||{}).concat(flat(d.commander||[])));
+  if(L.length<20&&Array.isArray(a.archidekt))L=mergeMax(flat(a.archidekt));
+  if(L.length<20){L=[];const cl=a.container&&a.container.json_dict&&a.container.json_dict.cardlists;
+    for(const l of cl||[])for(const v of l.cardviews||[])L.push({name:v.name})}
+  return L}
+let _acc=null;
+async function edhAccessOK(){if(_acc===null){try{await jget('https://json.edhrec.com/pages/average-decks/atraxa-praetors-voice.json');_acc=true}catch(e){_acc=false}}return _acc}
+const EDHL={optimized:'Bracket 4',cedh:'Bracket 5',budget:'Budget',expensive:'Teuer'};
+const chk=c=>[...document.querySelectorAll('.'+c+':checked')].map(e=>e.value);
+function edhPlan(){const b=chk('edhb'),u=chk('edhu'),top=$('#edht').checked;
+  return{b:b.length?b:[''],u:u.length?u:[''],top,base:$('#edhtn').checked||!top}}
+function updEdh(){const p=edhPlan();
+  $('#edhn').textContent=`Bis zu ${perCmd()} Abrufe pro Commander.`;updCnt()}
+$('#edhopts').onchange=updEdh;updEdh();
+const SRC={
+  async edhrec(cmd){
+    const s=slug(cmd),out=[],errs=[],none=[],p=edhPlan(),base=`https://json.edhrec.com/pages/average-decks/${s}`;
+    const min=Math.max(1,+$('#edhmin').value||1),BK={optimized:'4',cedh:'5'};
+    let tries=0,forb=0,lastE=null;
+    const one=async(path,label,add)=>{
+      if(add)tries++;
+      try{const a=await jget(`${base}${path?'/'+path:''}.json`);
+        if(add){const L=avgDeck(a);
+          if(L.length<20){const d=a.deck;
+            const empty=d==null||d===''||(Array.isArray(d)&&d.length<20)||(typeof d=='object'&&!Array.isArray(d)&&(!Object.keys(d).length||(d.cards&&typeof d.cards=='object'&&!Object.keys(d.cards).length)));
+            if(empty)throw Object.assign(new Error('keine Daten'),{none:true});
+            throw new Error('nicht lesbar (deck: '+JSON.stringify(d).slice(0,150)+')')}
+          if(!L.some(c=>norm(c.name)==norm(cmd)))L.push({name:cmd});
+          out.push({name:'Average Deck – '+label,url:`https://edhrec.com/average-decks/${s}${path?'/'+path:''}`,cards:L,raw:JSON.stringify(a.deck).slice(0,700)})}
+        return a}
+      catch(e){
+        lastE=e;
+        if(add){if(e.none||/40[34]/.test(e.message)){none.push(label);if(/403/.test(e.message))forb++}else errs.push(`${label}: ${e.message}`)}
+        return null}};
+    // 1) Allgemeine Seite: enthält die Zähler (Decks pro Bracket, Budget und Thema)
+    const g=await one('','Allgemein',p.b.includes('')&&p.u.includes('')&&p.base);
+    if(!g&&lastE&&/40[34]/.test(lastE.message)){
+      // Gar keine allgemeine Seite: Commander hat bei EDHREC kein Average Deck (zu wenige Decks)
+      if(/403/.test(lastE.message)&&!(await edhAccessOK()))throw new Error('HTTP 403 (Abruflimit oder Sperre bei EDHREC?)');
+      lastNone.push(`${cmd} / kein Average Deck bei EDHREC (zu wenige Decks)`);
+      return []}
+    await sleep(250);
+    const bc=(g&&g.bracket_counts)||{},uc=(g&&g.budget_counts)||{};
+    const tags=((g&&g.tag_counts)||[]).filter(x=>x&&x.slug);
+    const known=!!(g&&(g.bracket_counts||g.budget_counts||g.tag_counts));
+    const tcount=new Map(tags.map(x=>[x.slug,x.count||0]));
+    // 2) Themen
+    let th=p.base?[['','']]:[];
+    if(p.top){
+      let t=tags.slice().sort((x,y)=>(y.count||0)-(x.count||0)).slice(0,3);
+      if(!t.length){try{const j=await jget(`https://json.edhrec.com/pages/commanders/${s}.json`);
+        t=((j.panels||{}).taglinks||[]).filter(x=>x.slug).sort((x,y)=>(y.count||0)-(x.count||0)).slice(0,3);
+        for(const x of t)tcount.set(x.slug,x.count||0)}catch(e){errs.push('Themen: '+e.message)}}
+      if(!t.length)errs.push('Themen: keine gefunden');
+      th=th.concat(t.map(x=>[x.slug,x.value||x.slug]))}
+    if(!th.length)th=[['','']];
+    // 3) Varianten abrufen, aussichtslose überspringen
+    for(const b of p.b)for(const [ts,tl] of th)for(const u of p.u){
+      if(!b&&!ts&&!u)continue;
+      const path=[b,ts,u].filter(Boolean).join('/');
+      const label=[EDHL[b],tl,EDHL[u]].filter(Boolean).join(', ')||'Allgemein';
+      if(known){
+        const parts=[];
+        if(b)parts.push(+bc[BK[b]]||0);
+        if(ts)parts.push(tcount.get(ts)||0);
+        if(u)parts.push(+uc[u]||0);
+        const ub=Math.min(...parts);
+        if(ub<min){none.push(`${label} (übersprungen, höchstens ${ub} Decks)`);continue}}
+      await one(path,label,true);
+      await sleep(250)}
+    if(!out.length&&forb&&forb==tries&&!(await edhAccessOK()))throw new Error('HTTP 403 bei allen Varianten (Abruflimit oder Sperre bei EDHREC?)');
+    for(const l of none)lastNone.push(`${cmd} / ${l}`);
+    if(!out.length&&errs.length)throw new Error(errs.join('; '));
+    for(const e of errs)lastErr.push(`${cmd} / EDHREC ${e}`);
+    return out}
+};
+const SRCNAME={edhrec:'EDHREC'};
+function evalDeck(cards){const seen=new Set(),miss=[];let own=0,size=0,basics=0;
+  for(const c of cards){const k=norm(c.name),q=c.qty||1;
+    if(BASIC.has(k)){basics+=q;size+=q;continue}
+    if(seen.has(k))continue;seen.add(k);size++;coll.has(k)?own++:miss.push(c.name)}
+  return{total:seen.size,own,miss,size,basics}}
+async function run(){
+  if(!sel.size){alert('Bitte mindestens einen Commander auswählen.');return}
+  const srcs=['edhrec'];
+  const est=estimate();
+  if(est.n>200&&!confirm(`Das sind bis zu ${est.n} Abrufe bei EDHREC (grob ${est.min} Minuten). Fortfahren?`))return;
+  results=[];lastErr=[];lastNone=[];_acc=null;$('#go').disabled=true;let done=0;
+  for(const cmd of sel)for(const s of srcs){
+    $('#st3').textContent=`[${++done}/${sel.size}] ${cmd}…`;
+    try{for(const d of await SRC[s](cmd)){const e=evalDeck(d.cards);if(e.total)results.push({cmd,src:s,name:d.name,url:d.url,raw:d.raw,...e,pct:e.own/e.total})}}
+    catch(e){lastErr.push(`${cmd} / ${SRCNAME[s]}: ${e.message}`)}
+    await sleep(200)}
+  $('#go').disabled=false;$('#st3').textContent=`${results.length} Decks ausgewertet`+(lastNone.length?`, ${lastNone.length} Varianten ohne Daten bei EDHREC.`:'.');renderRes()}
+function sizeInfo(r){return `${r.size} Karten, davon ${r.basics} Basic Lands (nicht gewertet)`+(r.size!=100?` <b style="color:var(--low)">Achtung: ${r.size} statt 100 Karten in dieser Liste</b>`:'')}
+function renderRes(){
+  const min=(+$('#min').value||0)/100;
+  const R=results.filter(r=>r.pct>=min).sort((a,b)=>b.pct-a.pct).slice(0,100);
+  const col=p=>p>=.9?'var(--ok)':p>=.7?'var(--mid)':'var(--low)';
+  $('#res').innerHTML=(lastErr.length?`<p class="mut">Nicht abrufbar:<br>${lastErr.map(esc).join('<br>')}</p>`:'')+
+    (lastNone.length?`<details><summary>Varianten ohne Average Deck (${lastNone.length}): bei EDHREC nicht vorhanden oder übersprungen</summary><pre>${esc(lastNone.join('\n'))}</pre></details>`:'')+
+    (R.map(r=>`<div class="res"><div><div class="pct" style="color:${col(r.pct)}">${Math.round(r.pct*100)}%</div><div class="bar"><i style="width:${r.pct*100}%;background:${col(r.pct)}"></i></div></div>
+    <div><b>${esc(r.cmd)}</b> (${SRCNAME[r.src]})<br><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>
+    <div class="mut">${r.own} von ${r.total} Nicht-Basic-Karten vorhanden, ${r.miss.length} fehlen</div>
+    <div class="mut">${sizeInfo(r)}</div>
+    <details><summary>Fehlende Karten</summary><pre>${esc(r.miss.join('\n'))}</pre></details>${r.size!=100&&r.raw?`<details><summary>Rohdaten von EDHREC (Diagnose)</summary><pre>${esc(r.raw)}</pre></details>`:''}</div></div>`).join('')
+    ||(results.length?'<p class="mut">Kein Deck erreicht die Mindestquote. Senke den Wert oben.</p>':''))}
+$('#go').onclick=run;$('#min').oninput=renderRes;
+
+
+/* ---------- Combos (Commander Spellbook, nur über server.py) ---------- */
+function fillCmb(){const o=['<option value="*">Alle (kein Filter)</option>'];
+  for(const n of cmdPool)o.push(`<option value="ci:${esc(cmdCI[n]||'')}">${esc(n)} (${esc(cmdCI[n]||'farblos')})</option>`);
+  $('#cmbCI').innerHTML=o.join('')}
+function cmbItem(c,tag){return `<div class="res"><div><div class="pct" style="font-size:22px">${(c.pop||0).toLocaleString('de-DE')}</div><div class="mut">Decks</div></div>
+  <div>${c.cards.map(n=>`<span class="chip">${esc(n)}</span>`).join('')}${c.tpl?'<span class="chip">+ passende Karte</span>':''}
+  ${c.missing?`<div class="mut">Fehlt: <b>${esc(c.missing)}</b></div>`:''}
+  <div class="mut">Ergebnis: ${esc(c.res.slice(0,4).join(', ')||'–')} · Farben: ${esc(c.ci||'farblos')}</div>
+  <a href="https://commanderspellbook.com/combo/${encodeURIComponent(c.id)}/" target="_blank" rel="noopener">Auf Commander Spellbook ansehen</a>
+  <details><summary>Ablauf</summary><pre>${esc(c.desc||'Keine Beschreibung')}</pre></details></div></div>`}
+function cmbBlock(title,list,count,tag){if(!list.length)return '';
+  return `<h3 style="margin:16px 0 0;font-size:16px">${title} (${count})</h3>`+(count>list.length?`<p class="mut">Angezeigt: die ${list.length} beliebtesten.</p>`:'')+list.map(c=>cmbItem(c,tag)).join('')}
+$('#cmbGo').onclick=async()=>{
+  if(!VIA){$('#cmbSt').textContent='Nur über den lokalen Server verfügbar (python3 server.py).';return}
+  if(!coll.size){$('#cmbSt').textContent='Bitte zuerst oben deine Sammlung laden.';return}
+  const v=$('#cmbCI').value;$('#cmbGo').disabled=true;$('#cmbRes').innerHTML='';
+  $('#cmbSt').textContent='Suche läuft. Beim ersten Mal wird die Combo-Datenbank geladen, das kann einige Minuten dauern…';
+  try{
+    const r=await fetch('/api/combos',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({names:[...coll.keys()],identity:v=='*'?null:v.slice(3),almost:$('#cmbAlmost').checked})});
+    if(!r.ok)throw new Error(await r.text());
+    const j=await r.json();
+    $('#cmbSt').textContent=`${j.complete_count+j.template_count} komplette Combos gefunden (aus ${j.total.toLocaleString('de-DE')} in der Datenbank).`;
+    $('#cmbRes').innerHTML=cmbBlock('Komplett vorhanden',j.complete,j.complete_count)
+      +cmbBlock('Komplett, mit „passender Karte“ (eine beliebige Karte, die eine Beschreibung erfüllt)',j.template,j.template_count)
+      +cmbBlock('Es fehlt genau eine Karte',j.almost,j.almost_count)
+      ||'<p class="mut">Keine Combos gefunden.</p>';
+  }catch(e){$('#cmbSt').textContent='Fehler: '+e.message}
+  $('#cmbGo').disabled=false};
+if(VIA){$('#cmbGo').disabled=false}else{$('#cmbSt').textContent='Nur über den lokalen Server verfügbar.'}
+
+
+/* ---------- Precons (MTGJSON, nur über server.py) ---------- */
+let precons=null,pEval=[];
+const pcol=p=>p>=.9?'var(--ok)':p>=.7?'var(--mid)':'var(--low)';
+function renderP(){const min=(+$('#pMin').value||0)/100;
+  const R=pEval.filter(x=>x.pct>=min).sort((a,b)=>b.pct-a.pct).slice(0,60);
+  $('#pRes').innerHTML=R.map(x=>`<div class="res"><div><div class="pct" style="color:${pcol(x.pct)}">${Math.round(x.pct*100)}%</div><div class="bar"><i style="width:${x.pct*100}%;background:${pcol(x.pct)}"></i></div></div>
+    <div><b>${esc(x.d.name)}</b> <span class="mut">${esc(x.d.code)} ${esc((x.d.date||'').slice(0,4))}</span><br>
+    <span class="mut">Commander: ${esc(x.d.cmd.join(' / ')||'–')}</span>
+    <div class="mut">${x.own} von ${x.total} Nicht-Basic-Karten vorhanden, ${x.miss.length} fehlen</div>
+    <div class="mut">${sizeInfo(x)}</div>
+    <details><summary>Fehlende Karten</summary><pre>${esc(x.miss.join('\n'))}</pre></details></div></div>`).join('')
+    ||'<p class="mut">Kein Precon erreicht die Mindestquote. Senke den Wert oben.</p>'}
+$('#pGo').onclick=async()=>{
+  if(!coll.size){$('#pSt').textContent='Bitte zuerst oben deine Sammlung laden.';return}
+  $('#pGo').disabled=true;$('#pSt').textContent='Lade Precons… Beim ersten Mal kann das einige Minuten dauern.';
+  try{
+    if(!precons){const r=await fetch('/api/precons');if(!r.ok)throw new Error(await r.text());precons=await r.json()}
+    pEval=precons.map(d=>({d,...evalDeck(d.cards.map(([name,qty])=>({name,qty})))})).filter(x=>x.total).map(x=>({...x,pct:x.own/x.total}));
+    $('#pSt').textContent=`${pEval.length} Precons ausgewertet.`;renderP()
+  }catch(e){$('#pSt').textContent='Fehler: '+e.message}
+  $('#pGo').disabled=false};
+$('#pMin').oninput=()=>{if(pEval.length)renderP()};
+if(VIA){$('#pGo').disabled=false}else{$('#pSt').textContent='Nur über den lokalen Server verfügbar.'}
+
+/* ---------- Einzelnes Deck ---------- */
+$('#chk').onclick=()=>{const e=evalDeck(parseText($('#man').value));
+  $('#manres').innerHTML=e.total?`<p><b>${Math.round(e.own/e.total*100)} %</b> vorhanden (${e.own} von ${e.total} Nicht-Basic-Karten), ${e.miss.length} fehlen<br><span class="mut">${sizeInfo(e)}</span></p><pre>${esc(e.miss.join('\n'))}</pre>`:'<p class="mut">Keine Karten erkannt.</p>'};
+</script>
+</body>
+</html>
